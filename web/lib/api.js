@@ -29,12 +29,36 @@ export async function postImage(path, file) {
   return res.blob();
 }
 
-export async function fetchAudio(url, format, quality) {
-  const res = await fetch("/api/py/audio", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ url, format, quality }),
-  });
+// Create an async download job; the sidecar returns { job_id, events, file }.
+export function createDownload(payload) {
+  return postJson("/api/py/download", payload);
+}
+
+// Subscribe to a job's Server-Sent Events stream. Returns an unsubscribe fn.
+export function subscribeJob(eventsPath, onUpdate) {
+  const source = new EventSource(`/api/py${eventsPath}`);
+  let closed = false;
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    source.close();
+  };
+  source.onmessage = (event) => {
+    try {
+      onUpdate(JSON.parse(event.data));
+    } catch {
+      /* ignore malformed frames */
+    }
+  };
+  source.addEventListener("end", close);
+  source.addEventListener("timeout", close);
+  source.onerror = close;
+  return close;
+}
+
+export async function fetchJobFile(jobId, name) {
+  const suffix = name ? `?name=${encodeURIComponent(name)}` : "";
+  const res = await fetch(`/api/py/jobs/${encodeURIComponent(jobId)}/file${suffix}`);
   if (!res.ok) {
     const data = await res.json().catch(() => null);
     throw new Error(data?.detail ?? data?.error ?? `Download failed with status ${res.status}`);
@@ -78,6 +102,23 @@ export function formatDuration(seconds, fallback) {
   const h = Math.floor(seconds / 3600);
   const pad = (v) => String(v).padStart(2, "0");
   return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+}
+
+export function formatSpeed(bytesPerSecond) {
+  if (!bytesPerSecond) return "";
+  return `${formatBytes(bytesPerSecond)}/s`;
+}
+
+// Turn "key: a,b" lines from the advanced panel into extractor_args.
+export function parseExtractorArgs(text) {
+  const args = {};
+  for (const line of String(text || "").split("\n")) {
+    const [rawKey, ...rest] = line.split(":");
+    const key = rawKey?.trim();
+    const values = rest.join(":").split(",").map((v) => v.trim()).filter(Boolean);
+    if (key && values.length) args[key] = values;
+  }
+  return Object.keys(args).length ? args : undefined;
 }
 
 export function formatUploadDate(value) {

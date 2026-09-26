@@ -11,17 +11,25 @@
   "scripts": {
     "build": "cd web && next build",
     "dev:web": "cd web && next dev -p 3001",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "test": "node --test \"test/*.test.js\"",
+    "typecheck": "tsc -b --noEmit",
+    "check": "npm run lint && npm run test",
     "start": "concurrently --kill-others --names python,node --prefix-colors cyan,green \"npm run start:python\" \"npm run start:node\"",
     "start:python": "python -m uvicorn main:app --app-dir python --host 127.0.0.1 --port ${PY_INTERNAL_PORT:-8000}",
     "start:node": "node server/index.js"
   },
   "dependencies": {
+    "compression": "^1.8.2",
     "concurrently": "^9.1.2",
     "express": "^4.21.2",
+    "helmet": "^8.3.0",
     "http-proxy-middleware": "^3.0.3",
     "sharp": "^0.35.4"
   },
   "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
     "@tailwindcss/postcss": "^4.3.3",
     "next": "^16.3.6",
     "react": "^19.3.0",

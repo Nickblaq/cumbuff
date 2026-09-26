@@ -1,18 +1,24 @@
-import express from "express";
+import crypto from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import express from "express";
+import compression from "compression";
+import helmet from "helmet";
 import { createProxyMiddleware } from "http-proxy-middleware";
 import sharp from "sharp";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const PORT = Number(process.env.PORT || 3000);
+export const PORT = Number(process.env.PORT || 3000);
 const PY_PORT = Number(process.env.PY_INTERNAL_PORT || 8000);
 const PY_ORIGIN = `http://127.0.0.1:${PY_PORT}`;
 const PY_HEALTH = `${PY_ORIGIN}/health`;
 const WEB_DIR = path.join(__dirname, "..", "web", "out");
+const LONG_REQUEST_MS = 30 * 60 * 1000;
 
 const app = express();
+app.disable("x-powered-by");
+
 let pythonReady = false;
 
 async function pingPython() {
@@ -29,52 +35,135 @@ async function monitorPython() {
   for (;;) {
     const ready = await pingPython();
     if (ready !== pythonReady) {
-      console.log(`[gateway] python sidecar ${ready ? "ready" : "unavailable"}`);
+      console.log(
+        JSON.stringify({
+          ts: new Date().toISOString(),
+          level: "info",
+          msg: `python sidecar ${ready ? "ready" : "unavailable"}`,
+        }),
+      );
     }
     pythonReady = ready;
     await new Promise((resolve) => setTimeout(resolve, ready ? 5000 : 500));
   }
 }
 
-// Retry until the sidecar answers, so early requests are not dropped.
-async function waitForPython(maxMs = 10000) {
-  const deadline = Date.now() + maxMs;
-  do {
-    if (await pingPython()) {
-      pythonReady = true;
-      return true;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 300));
-  } while (Date.now() < deadline);
-  return false;
+// Single-flight probe: never block a request on a 10s wait; answer immediately
+// with 503 + Retry-After and refresh readiness in the background.
+let probeInFlight = null;
+function kickProbe() {
+  if (!probeInFlight) {
+    probeInFlight = pingPython()
+      .then((ok) => {
+        pythonReady = ok;
+      })
+      .catch(() => {})
+      .finally(() => {
+        probeInFlight = null;
+      });
+  }
+  return probeInFlight;
 }
+
+/* ------------------------------------------------------------------ *
+ * Request logging (structured, with request ids)
+ * ------------------------------------------------------------------ */
+
+app.use((req, res, next) => {
+  req.id = req.headers["x-request-id"] || crypto.randomUUID();
+  res.setHeader("X-Request-Id", req.id);
+  const start = Date.now();
+  res.on("finish", () => {
+    console.log(
+      JSON.stringify({
+        ts: new Date().toISOString(),
+        level: res.statusCode >= 500 ? "error" : "info",
+        msg: "request",
+        id: req.id,
+        method: req.method,
+        path: req.originalUrl,
+        status: res.statusCode,
+        ms: Date.now() - start,
+      }),
+    );
+  });
+  next();
+});
+
+/* ------------------------------------------------------------------ *
+ * Security headers + compression
+ * ------------------------------------------------------------------ */
+
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        "default-src": ["'self'"],
+        "script-src": ["'self'", "'unsafe-inline'"],
+        "style-src": ["'self'", "'unsafe-inline'"],
+        "img-src": ["'self'", "data:", "blob:", "https:"],
+        "media-src": ["'self'", "blob:"],
+        "font-src": ["'self'", "data:"],
+        "connect-src": ["'self'"],
+        "object-src": ["'none'"],
+        "base-uri": ["'self'"],
+        "form-action": ["'self'"],
+        "frame-ancestors": ["'none'"],
+      },
+    },
+    // Remote thumbnails and cross-origin media must keep working.
+    crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  }),
+);
+
+app.use(
+  compression({
+    threshold: 1024,
+    filter: (req, res) => {
+      if (req.headers["x-no-compression"]) return false;
+      // Never buffer Server-Sent Events or media streams.
+      const type = res.getHeader("Content-Type");
+      if (typeof type === "string" && type.includes("text/event-stream")) return false;
+      return compression.filter(req, res);
+    },
+  }),
+);
+
+/* ------------------------------------------------------------------ *
+ * Python sidecar proxy
+ * ------------------------------------------------------------------ */
 
 const pythonProxy = createProxyMiddleware({
   pathFilter: (p) => p === "/api/py" || p.startsWith("/api/py/"),
   target: PY_ORIGIN,
   changeOrigin: true,
   xfwd: true,
+  proxyTimeout: LONG_REQUEST_MS,
+  timeout: LONG_REQUEST_MS,
   pathRewrite: (p) => p.replace(/^\/api\/py/, "") || "/",
   on: {
     error: (err, _req, res) => {
-      console.error("[gateway] python proxy error:", err.message);
+      console.error(
+        JSON.stringify({ ts: new Date().toISOString(), level: "error", msg: "proxy error", detail: err.message }),
+      );
       if (res && !res.headersSent && typeof res.writeHead === "function") {
         res.writeHead(502, { "Content-Type": "application/json" });
-        res.end(
-          JSON.stringify({ error: "python_backend_unavailable", detail: err.message }),
-        );
+        res.end(JSON.stringify({ error: "python_backend_unavailable", detail: err.message }));
       }
     },
   },
 });
 
 // Proxy first, before body parsing, so request bodies stream straight through.
-app.use(async (req, res, next) => {
+app.use((req, res, next) => {
   if (!req.path.startsWith("/api/py")) return next();
-  if (pythonReady || (await waitForPython())) return pythonProxy(req, res, next);
-  res.status(503).json({
+  if (pythonReady) return pythonProxy(req, res, next);
+  kickProbe();
+  res.set("Retry-After", "2").status(503).json({
     error: "python_backend_starting",
-    detail: "The Python sidecar is not ready yet. Please retry shortly.",
+    detail: "The Python sidecar is not ready yet. Please retry in a moment.",
+    retry_after: 2,
   });
 });
 
@@ -94,6 +183,20 @@ const MIME = {
 };
 const FITS = ["cover", "contain", "fill", "inside", "outside"];
 const EFFECTS = ["none", "grayscale", "blur", "sharpen", "negate"];
+const POSITIONS = [
+  "center",
+  "top",
+  "right",
+  "bottom",
+  "left",
+  "top-left",
+  "top-right",
+  "bottom-left",
+  "bottom-right",
+  "attention",
+  "entropy",
+];
+const ANIMATED_FORMATS = new Set(["gif", "webp"]);
 
 // Accept raw image bytes (or SVG text); never parse these as JSON.
 const rawImage = express.raw({
@@ -107,10 +210,19 @@ function parseNum(value, min, max, fallback) {
   return Math.min(Math.max(n, min), max);
 }
 
+function parseBool(value, fallback) {
+  if (value === undefined) return fallback;
+  return value === "1" || value === "true" || value === "yes";
+}
+
 function parseFormat(value) {
   const f = String(value || "").toLowerCase();
   if (f === "jpg") return "jpeg";
   return MIME[f] ? f : null;
+}
+
+function parsePosition(value) {
+  return POSITIONS.includes(value) ? value : undefined;
 }
 
 function requireBody(req, res) {
@@ -136,35 +248,47 @@ async function runSharp(res, work) {
   try {
     await work();
   } catch (err) {
-    console.error("[gateway] sharp error:", err.message);
+    console.error(
+      JSON.stringify({ ts: new Date().toISOString(), level: "error", msg: "sharp error", detail: err.message }),
+    );
     res.status(400).json({ error: "image_processing_failed", detail: err.message });
   }
 }
 
-// Resize / convert / apply an effect and stream the result back.
+// Resize / convert / animate / apply an effect and stream the result back.
 app.post("/api/node/image/resize", rawImage, (req, res) =>
   runSharp(res, async () => {
     if (!requireBody(req, res)) return;
     const width = parseNum(req.query.width, 1, 6000, undefined);
     const height = parseNum(req.query.height, 1, 6000, undefined);
     const fit = FITS.includes(req.query.fit) ? req.query.fit : "inside";
+    const position = parsePosition(req.query.position);
     const effect = EFFECTS.includes(req.query.effect) ? req.query.effect : "none";
     const quality = parseNum(req.query.quality, 1, 100, 80);
+    const withoutEnlargement = parseBool(req.query.withoutEnlargement, false);
 
-    const input = sharp(req.body, { failOn: "none" });
-    const meta = await input.metadata();
+    const meta = await sharp(req.body, { failOn: "none" }).metadata();
+    const inputAnimated = (meta.pages || 1) > 1;
     const outFormat = parseFormat(req.query.format) || (MIME[meta.format] ? meta.format : "webp");
+    const keepAnimation =
+      inputAnimated && ANIMATED_FORMATS.has(outFormat) && parseBool(req.query.animated, true);
 
-    let pipeline = sharp(req.body, { failOn: "none" });
-    if (width || height) pipeline = pipeline.resize({ width, height, fit });
+    let pipeline = sharp(req.body, { failOn: "none", animated: keepAnimation });
+    if (width || height) {
+      pipeline = pipeline.resize({ width, height, fit, position, withoutEnlargement });
+    }
     pipeline = applyEffect(pipeline, effect, req);
-    pipeline = pipeline.toFormat(outFormat, { quality });
+
+    const outOpts = { quality };
+    if (keepAnimation && outFormat === "gif") outOpts.loop = 0;
+    pipeline = pipeline.toFormat(outFormat, outOpts);
 
     const { data, info } = await pipeline.toBuffer({ resolveWithObject: true });
     res.setHeader("Content-Type", MIME[outFormat] || "application/octet-stream");
     res.setHeader("X-Image-Width", info.width);
     res.setHeader("X-Image-Height", info.height);
     res.setHeader("X-Image-Format", info.format);
+    res.setHeader("X-Image-Animated", keepAnimation ? "true" : "false");
     res.setHeader("Cache-Control", "no-store");
     res.send(data);
   }),
@@ -202,6 +326,8 @@ app.post("/api/node/image/metadata", rawImage, (req, res) =>
       orientation: m.orientation,
       isAnimated: m.pages > 1,
       pages: m.pages,
+      loop: m.loop,
+      delay: m.delay,
       size: req.body.length,
       aspectRatio: m.width && m.height ? Number((m.width / m.height).toFixed(3)) : null,
     });
@@ -255,6 +381,39 @@ app.get("/api/node/image/placeholder", (req, res) =>
 );
 
 /* ------------------------------------------------------------------ *
+ * Social share image (generated once with sharp, no binary asset needed)
+ * ------------------------------------------------------------------ */
+
+app.get("/og.png", (_req, res) =>
+  runSharp(res, async () => {
+    const width = 1200;
+    const height = 630;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
+      <defs>
+        <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#08080b"/>
+          <stop offset="60%" stop-color="#141019"/>
+          <stop offset="100%" stop-color="#0b211d"/>
+        </linearGradient>
+      </defs>
+      <rect width="100%" height="100%" fill="url(#bg)"/>
+      <rect x="0" y="0" width="100%" height="6" fill="#f4b544"/>
+      <g font-family="Inter, Segoe UI, sans-serif" fill="#f5f5f7">
+        <text x="90" y="300" font-size="86" font-weight="800">cumbuff</text>
+        <text x="90" y="370" font-size="34" fill="#9a9aad">one endpoint for video &amp; image work</text>
+        <text x="90" y="440" font-size="26" font-family="monospace" fill="#35d6ac">yt-dlp + sharp · node + python</text>
+      </g>
+      <rect x="88" y="150" width="88" height="88" rx="22" fill="#f4b544"/>
+      <text x="132" y="210" font-family="monospace" font-size="40" font-weight="700" fill="#08080b" text-anchor="middle">cb</text>
+    </svg>`;
+    const data = await sharp(Buffer.from(svg)).png().toBuffer();
+    res.setHeader("Content-Type", "image/png");
+    res.setHeader("Cache-Control", "public, max-age=86400, immutable");
+    res.send(data);
+  }),
+);
+
+/* ------------------------------------------------------------------ *
  * Node service routes
  * ------------------------------------------------------------------ */
 
@@ -273,10 +432,15 @@ app.get("/api/node/info", (_req, res) => {
 });
 
 /* ------------------------------------------------------------------ *
- * Combined health for the whole service
+ * Health: liveness (always ok) vs readiness (needs the sidecar)
  * ------------------------------------------------------------------ */
 
-app.get("/health", async (_req, res) => {
+app.get("/health", (_req, res) => {
+  // Liveness: the gateway is up. Never fails on a sidecar restart.
+  res.json({ status: "ok", services: { node: "up", python: pythonReady ? "up" : "down" } });
+});
+
+app.get("/health/ready", async (_req, res) => {
   const pyUp = pythonReady && (await pingPython());
   res.status(pyUp ? 200 : 503).json({
     status: pyUp ? "ok" : "degraded",
@@ -293,27 +457,45 @@ app.get("/api", (_req, res) => {
     service: "cumbuff",
     description: "Node (sharp) + Python (yt-dlp) behind one endpoint, with a Next.js UI",
     endpoints: {
-      health: "/health",
+      health: ["GET /health (liveness)", "GET /health/ready (readiness)"],
       node: [
         "GET  /api/node/hello",
         "GET  /api/node/info",
         "GET  /api/node/image/placeholder?width=&height=&text=",
-        "POST /api/node/image/resize?width=&height=&fit=&format=&quality=&effect=",
+        "POST /api/node/image/resize?width=&height=&fit=&position=&format=&quality=&effect=&animated=&withoutEnlargement=",
         "POST /api/node/image/thumbnail?size=",
         "POST /api/node/image/metadata",
         "POST /api/node/image/svg?width=&format=",
+        "GET  /og.png",
       ],
       python: [
-        "POST /api/py/metadata { url }",
-        "POST /api/py/formats { url }",
-        "POST /api/py/search { query, limit }",
+        "POST /api/py/metadata { url, advanced? }",
+        "POST /api/py/formats { url, advanced? }",
+        "POST /api/py/search { query, limit, advanced? }",
+        "POST /api/py/download { url, kind, format, quality, video_format, subtitles, thumbnail, advanced? }",
+        "GET  /api/py/jobs/{id}",
+        "GET  /api/py/jobs/{id}/events (SSE)",
+        "GET  /api/py/jobs/{id}/file?name=",
         "POST /api/py/audio { url, format, quality }",
       ],
     },
   });
 });
 
-app.use(express.static(WEB_DIR, { extensions: ["html"] }));
+app.use(
+  express.static(WEB_DIR, {
+    extensions: ["html"],
+    setHeaders(res, filePath) {
+      if (filePath.includes(`${path.sep}_next${path.sep}static${path.sep}`)) {
+        res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+      } else if (filePath.endsWith(".html")) {
+        res.setHeader("Cache-Control", "no-cache");
+      } else {
+        res.setHeader("Cache-Control", "public, max-age=86400");
+      }
+    },
+  }),
+);
 
 // Fallback: API misses stay JSON, everything else serves the SPA shell.
 app.use((req, res) => {
@@ -330,16 +512,32 @@ app.use((req, res) => {
   });
 });
 
-const server = app.listen(PORT, "0.0.0.0", () => {
-  console.log(`[gateway] node api listening on 0.0.0.0:${PORT}`);
-  console.log(`[gateway] proxying /api/py/* -> ${PY_ORIGIN}`);
-  console.log(`[gateway] serving static UI from ${WEB_DIR}`);
-  monitorPython();
-});
-
-for (const signal of ["SIGINT", "SIGTERM"]) {
-  process.on(signal, () => {
-    console.log(`[gateway] received ${signal}, shutting down`);
-    server.close(() => process.exit(0));
+export function start() {
+  const server = app.listen(PORT, "0.0.0.0", () => {
+    console.log(
+      JSON.stringify({
+        ts: new Date().toISOString(),
+        level: "info",
+        msg: `gateway listening on 0.0.0.0:${PORT}`,
+        python: PY_ORIGIN,
+        web: WEB_DIR,
+      }),
+    );
+    monitorPython();
   });
+
+  for (const signal of ["SIGINT", "SIGTERM"]) {
+    process.on(signal, () => {
+      console.log(JSON.stringify({ ts: new Date().toISOString(), level: "info", msg: `received ${signal}` }));
+      server.close(() => process.exit(0));
+    });
+  }
+  return server;
+}
+
+export { app };
+
+// Only listen when executed directly, so tests can import the app.
+if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
+  start();
 }

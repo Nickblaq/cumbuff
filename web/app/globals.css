@@ -5,16 +5,16 @@
   --color-ink-900: #0f0f16;
   --color-ink-850: #14141d;
   --color-ink-800: #1a1a25;
-  --color-line: #262633;
+  --color-line: #2b2b3a;
   --color-mist-100: #f5f5f7;
   --color-mist-300: #c8c8d4;
-  --color-mist-400: #9a9aad;
-  --color-mist-500: #6f6f84;
+  --color-mist-400: #a6a6ba;
+  --color-mist-500: #8b8b9f;
   --color-amber-glow: #f4b544;
   --color-mint-glow: #35d6ac;
 
-  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: var(--font-mono-src), ui-monospace, "SFMono-Regular", monospace;
 }
 
 @layer base {
@@ -31,6 +31,25 @@
     background-color: var(--color-ink-950);
     color: var(--color-mist-100);
     font-family: var(--font-sans);
+  }
+
+  /* Visible keyboard focus everywhere, including elements that reset outlines. */
+  :focus-visible {
+    outline: 2px solid var(--color-amber-glow);
+    outline-offset: 2px;
+    border-radius: 8px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.001ms !important;
+      transition-duration: 0.001ms !important;
+    }
   }
 
   ::selection {

@@ -1,3 +1,6 @@
+const FOCUS =
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-glow/80 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-950";
+
 export function Card({ className = "", children }) {
   return (
     <div className={`rounded-2xl border border-line bg-ink-900/70 backdrop-blur-sm ${className}`}>
@@ -7,8 +10,7 @@ export function Card({ className = "", children }) {
 }
 
 export function Button({ variant = "primary", className = "", children, ...props }) {
-  const base =
-    "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50";
+  const base = `inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS}`;
   const variants = {
     primary:
       "bg-amber-glow text-ink-950 hover:brightness-105 shadow-[0_12px_34px_-14px_rgba(244,181,68,0.75)]",
@@ -30,7 +32,16 @@ export function Button({ variant = "primary", className = "", children, ...props
 export function Input({ className = "", ...props }) {
   return (
     <input
-      className={`w-full rounded-xl border border-line bg-ink-950/80 px-3.5 py-2.5 text-sm text-mist-100 placeholder:text-mist-500 outline-none transition focus:border-amber-glow/60 ${className}`}
+      className={`w-full rounded-xl border border-line bg-ink-950/80 px-3.5 py-2.5 text-sm text-mist-100 placeholder:text-mist-500 transition focus:border-amber-glow/60 ${FOCUS} ${className}`}
+      {...props}
+    />
+  );
+}
+
+export function Textarea({ className = "", ...props }) {
+  return (
+    <textarea
+      className={`scroll-thin w-full rounded-xl border border-line bg-ink-950/80 px-3.5 py-2.5 font-mono text-xs text-mist-100 placeholder:text-mist-500 transition focus:border-amber-glow/60 ${FOCUS} ${className}`}
       {...props}
     />
   );
@@ -38,12 +49,28 @@ export function Input({ className = "", ...props }) {
 
 export function Select({ className = "", children, ...props }) {
   return (
-    <select
-      className={`w-full appearance-none rounded-xl border border-line bg-ink-950/80 px-3.5 py-2.5 text-sm text-mist-100 outline-none transition focus:border-amber-glow/60 ${className}`}
-      {...props}
-    >
-      {children}
-    </select>
+    <span className="relative block">
+      <select
+        className={`w-full appearance-none rounded-xl border border-line bg-ink-950/80 px-3.5 py-2.5 pr-9 text-sm text-mist-100 transition focus:border-amber-glow/60 ${FOCUS} ${className}`}
+        {...props}
+      >
+        {children}
+      </select>
+      <svg
+        aria-hidden="true"
+        viewBox="0 0 20 20"
+        className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-mist-400"
+      >
+        <path
+          d="M6 8l4 4 4-4"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </span>
   );
 }
 
@@ -55,6 +82,23 @@ export function Field({ label, hint, children }) {
       </span>
       {children}
       {hint ? <span className="text-xs text-mist-500">{hint}</span> : null}
+    </label>
+  );
+}
+
+export function Toggle({ label, hint, checked, onChange }) {
+  return (
+    <label className="flex items-start gap-3 rounded-xl border border-line bg-ink-950/50 px-3.5 py-2.5">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className={`mt-0.5 h-4 w-4 shrink-0 rounded border-line bg-ink-900 accent-amber-glow ${FOCUS}`}
+      />
+      <span className="min-w-0">
+        <span className="block text-sm font-medium text-mist-100">{label}</span>
+        {hint ? <span className="block text-xs text-mist-500">{hint}</span> : null}
+      </span>
     </label>
   );
 }
@@ -79,15 +123,46 @@ export function Badge({ children, tone = "default" }) {
 export function Spinner({ className = "" }) {
   return (
     <span
+      aria-hidden="true"
       className={`inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent ${className}`}
     />
+  );
+}
+
+export function Progress({ stage, percent, detail, active = true }) {
+  const known = typeof percent === "number" && Number.isFinite(percent);
+  const value = known ? Math.max(0, Math.min(100, percent)) : 0;
+  const indeterminate = active && !known;
+  return (
+    <div className="flex flex-col gap-1.5" aria-live="polite">
+      <div className="flex items-center justify-between gap-3 text-xs">
+        <span className="font-medium text-mist-300">{stage}</span>
+        <span className="truncate font-mono text-mist-400">
+          {indeterminate ? "starting…" : `${value.toFixed(0)}%`}
+          {detail ? ` · ${detail}` : ""}
+        </span>
+      </div>
+      <div className="h-2 w-full overflow-hidden rounded-full bg-ink-800">
+        {indeterminate ? (
+          <div className="h-full w-1/3 animate-pulse rounded-full bg-gradient-to-r from-amber-glow to-mint-glow" />
+        ) : (
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-amber-glow to-mint-glow transition-[width] duration-300"
+            style={{ width: `${value}%` }}
+          />
+        )}
+      </div>
+    </div>
   );
 }
 
 export function Alert({ children }) {
   if (!children) return null;
   return (
-    <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-3.5 py-2.5 text-sm text-red-300">
+    <div
+      role="alert"
+      className="rounded-xl border border-red-500/30 bg-red-500/10 px-3.5 py-2.5 text-sm text-red-300"
+    >
       {children}
     </div>
   );

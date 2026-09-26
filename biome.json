@@ -1,0 +1,26 @@
+{
+  "$schema": "https://biomejs.dev/schemas/1.9.4/schema.json",
+  "files": {
+    "ignore": [
+      "node_modules",
+      "web/node_modules",
+      "web/out",
+      "web/.next",
+      ".venv",
+      "dist",
+      "coverage",
+      "*.tsbuildinfo"
+    ]
+  },
+  "organizeImports": { "enabled": false },
+  "formatter": { "enabled": false },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true,
+      "a11y": {
+        "noLabelWithoutControl": "off"
+      }
+    }
+  }
+}

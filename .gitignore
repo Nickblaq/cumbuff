@@ -2,6 +2,8 @@ node_modules/
 *.tsbuildinfo
 .next/
 out/
+dist/
+coverage/
 __pycache__/
 *.pyc
 .venv/
