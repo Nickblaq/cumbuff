@@ -1,0 +1,33 @@
+{
+  "$schema": "https://schema.railpack.com",
+  "provider": "node",
+  "packages": {
+    "node": "22",
+    "python": "3.13"
+  },
+  "caches": {
+    "pip": {
+      "directory": "/root/.cache/pip",
+      "type": "shared"
+    }
+  },
+  "steps": {
+    "python-install": {
+      "commands": [
+        { "src": "python/requirements.txt", "dest": "python/requirements.txt" },
+        {
+          "cmd": "python -m pip install -r python/requirements.txt",
+          "customName": "Install Python dependencies"
+        }
+      ],
+      "caches": ["pip"]
+    }
+  },
+  "deploy": {
+    "inputs": ["...", { "step": "python-install" }],
+    "startCommand": "npm start",
+    "variables": {
+      "PYTHONUNBUFFERED": "1"
+    }
+  }
+}
