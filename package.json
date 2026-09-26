@@ -2,13 +2,15 @@
   "name": "cumbuff",
   "version": "1.0.0",
   "private": true,
-  "description": "Single Railway service: a Node.js public gateway with a private Python FastAPI sidecar, fronted by one endpoint.",
+  "description": "Single Railway service: a Node gateway (sharp image APIs) + private Python FastAPI sidecar (yt-dlp media APIs) + a static Next.js UI, all on one endpoint.",
   "type": "module",
   "main": "server/index.js",
   "engines": {
     "node": "22"
   },
   "scripts": {
+    "build": "cd web && next build",
+    "dev:web": "cd web && next dev -p 3001",
     "start": "concurrently --kill-others --names python,node --prefix-colors cyan,green \"npm run start:python\" \"npm run start:node\"",
     "start:python": "python -m uvicorn main:app --app-dir python --host 127.0.0.1 --port ${PY_INTERNAL_PORT:-8000}",
     "start:node": "node server/index.js"
@@ -16,9 +18,15 @@
   "dependencies": {
     "concurrently": "^9.1.2",
     "express": "^4.21.2",
-    "http-proxy-middleware": "^3.0.3"
+    "http-proxy-middleware": "^3.0.3",
+    "sharp": "^0.35.4"
   },
   "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "next": "^16.3.6",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2"
   }
 }

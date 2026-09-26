@@ -26,6 +26,7 @@
   "deploy": {
     "inputs": ["...", { "step": "python-install" }],
     "startCommand": "npm start",
+    "aptPackages": ["ffmpeg", "fontconfig", "fonts-dejavu-core"],
     "variables": {
       "PYTHONUNBUFFERED": "1"
     }
