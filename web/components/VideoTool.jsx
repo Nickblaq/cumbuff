@@ -229,7 +229,7 @@ export default function VideoTool() {
 
         <fieldset className="mt-5 flex flex-col gap-4 border-0 p-0">
           <legend className="sr-only">Download type</legend>
-          <div className="inline-flex w-fit rounded-2xl border border-line bg-ink-950/60 p-1">
+          <div className="inline-flex w-fit rounded-2xl border border-line bg-surface-2/60 p-1">
             {[
               { id: "video", label: "Video" },
               { id: "audio", label: "Audio" },
@@ -241,8 +241,8 @@ export default function VideoTool() {
                 onClick={() => setMode(option.id)}
                 className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
                   mode === option.id
-                    ? "bg-amber-glow text-ink-950"
-                    : "text-mist-400 hover:text-mist-100"
+                    ? "bg-accent text-on-accent"
+                    : "text-fg-muted hover:text-fg"
                 }`}
               >
                 {option.label}
@@ -317,15 +317,15 @@ export default function VideoTool() {
             />
           </div>
 
-          <div className="rounded-2xl border border-line bg-ink-950/40 p-3.5">
+          <div className="rounded-2xl border border-line bg-surface-2/40 p-3.5">
             <button
               type="button"
               onClick={() => setShowAdvanced((v) => !v)}
               aria-expanded={showAdvanced}
-              className="flex w-full items-center justify-between text-sm font-semibold text-mist-100"
+              className="flex w-full items-center justify-between text-sm font-semibold text-fg"
             >
               Advanced yt-dlp options
-              <span className="font-mono text-xs text-mist-400">{showAdvanced ? "–" : "+"}</span>
+              <span className="font-mono text-xs text-fg-muted">{showAdvanced ? "–" : "+"}</span>
             </button>
             {showAdvanced ? (
               <div className="mt-4 flex flex-col gap-4">
@@ -397,8 +397,8 @@ export default function VideoTool() {
           ) : null}
 
           {job?.status === "done" ? (
-            <div className="rounded-xl border border-mint-glow/30 bg-mint-glow/5 px-3.5 py-3 text-sm">
-              <p className="font-medium text-mint-glow">
+            <div className="rounded-xl border border-accent-2/30 bg-accent-2/5 px-3.5 py-3 text-sm">
+              <p className="font-medium text-accent-2">
                 Download ready{job.files?.length > 1 ? " — extra files:" : ""}
               </p>
               <div className="mt-2 flex flex-wrap gap-2">
@@ -410,7 +410,7 @@ export default function VideoTool() {
                     </Button>
                   ))}
                 {(job.files?.length ?? 0) <= 1 ? (
-                  <span className="text-mist-400">Saved to your downloads.</span>
+                  <span className="text-fg-muted">Saved to your downloads.</span>
                 ) : null}
               </div>
             </div>
@@ -436,12 +436,12 @@ export default function VideoTool() {
               />
             ) : null}
             <div className="min-w-0 flex-1">
-              <h3 className="text-lg font-bold leading-snug text-mist-100">{info.title}</h3>
+              <h3 className="text-lg font-bold leading-snug text-fg">{info.title}</h3>
               <div className="mt-1 flex flex-wrap items-center gap-2">
                 <Badge tone="amber">{info.extractor ?? "video"}</Badge>
                 {info.is_live ? <Badge tone="mint">live</Badge> : null}
                 {info.uploader ? (
-                  <span className="text-sm text-mist-400">{info.uploader}</span>
+                  <span className="text-sm text-fg-muted">{info.uploader}</span>
                 ) : null}
               </div>
               <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -451,7 +451,7 @@ export default function VideoTool() {
                 <Stat label="Uploaded" value={formatUploadDate(info.upload_date)} />
               </div>
               {info.description ? (
-                <p className="mt-4 line-clamp-4 whitespace-pre-line text-sm leading-relaxed text-mist-400">
+                <p className="mt-4 line-clamp-4 whitespace-pre-line text-sm leading-relaxed text-fg-muted">
                   {info.description}
                 </p>
               ) : null}
@@ -461,12 +461,12 @@ export default function VideoTool() {
           {info.formats?.length ? (
             <div className="mt-6">
               <div className="mb-2 flex items-center justify-between">
-                <h4 className="text-sm font-semibold text-mist-100">Available formats</h4>
-                <span className="text-xs text-mist-500">{info.formats.length} tracks</span>
+                <h4 className="text-sm font-semibold text-fg">Available formats</h4>
+                <span className="text-xs text-fg-subtle">{info.formats.length} tracks</span>
               </div>
               <div className="scroll-thin max-h-80 overflow-auto rounded-xl border border-line">
                 <table className="w-full min-w-[640px] border-collapse text-left text-sm">
-                  <thead className="sticky top-0 bg-ink-850 text-[11px] uppercase tracking-wider text-mist-500">
+                  <thead className="sticky top-0 bg-surface-2 text-[11px] uppercase tracking-wider text-fg-subtle">
                     <tr>
                       <th scope="col" className="px-3 py-2 font-semibold">ID</th>
                       <th scope="col" className="px-3 py-2 font-semibold">Ext</th>
@@ -479,16 +479,16 @@ export default function VideoTool() {
                   </thead>
                   <tbody className="divide-y divide-line font-mono text-xs">
                     {info.formats.slice(0, 60).map((f, i) => (
-                      <tr key={`${f.format_id}-${i}`} className="hover:bg-ink-850/60">
-                        <td className="px-3 py-2 text-amber-glow">{f.format_id}</td>
-                        <td className="px-3 py-2 text-mist-300">{f.ext}</td>
-                        <td className="px-3 py-2 text-mist-100">{f.resolution ?? "—"}</td>
-                        <td className="px-3 py-2 text-mist-400">{f.fps ?? "—"}</td>
-                        <td className="px-3 py-2 text-mist-400">
+                      <tr key={`${f.format_id}-${i}`} className="hover:bg-surface-2/60">
+                        <td className="px-3 py-2 text-accent">{f.format_id}</td>
+                        <td className="px-3 py-2 text-fg-soft">{f.ext}</td>
+                        <td className="px-3 py-2 text-fg">{f.resolution ?? "—"}</td>
+                        <td className="px-3 py-2 text-fg-muted">{f.fps ?? "—"}</td>
+                        <td className="px-3 py-2 text-fg-muted">
                           {f.vcodec ?? "—"} / {f.acodec ?? "—"}
                         </td>
-                        <td className="px-3 py-2 text-mist-400">{formatBytes(f.filesize)}</td>
-                        <td className="px-3 py-2 text-mist-500">{f.note ?? "—"}</td>
+                        <td className="px-3 py-2 text-fg-muted">{formatBytes(f.filesize)}</td>
+                        <td className="px-3 py-2 text-fg-subtle">{f.note ?? "—"}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -521,7 +521,7 @@ export default function VideoTool() {
             {results.map((r) => (
               <div
                 key={r.id}
-                className="group overflow-hidden rounded-xl border border-line bg-ink-850/50 transition hover:border-amber-glow/50"
+                className="group overflow-hidden rounded-xl border border-line bg-surface-2/50 transition hover:border-accent/50"
               >
                 <button
                   type="button"
@@ -529,7 +529,7 @@ export default function VideoTool() {
                   className="block w-full text-left"
                   aria-label={`Inspect ${r.title}`}
                 >
-                  <div className="aspect-video w-full overflow-hidden bg-ink-800">
+                  <div className="aspect-video w-full overflow-hidden bg-surface-3">
                     {r.thumbnail ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
@@ -540,8 +540,8 @@ export default function VideoTool() {
                     ) : null}
                   </div>
                   <div className="p-3">
-                    <p className="line-clamp-2 text-sm font-medium text-mist-100">{r.title}</p>
-                    <p className="mt-1 text-xs text-mist-500">
+                    <p className="line-clamp-2 text-sm font-medium text-fg">{r.title}</p>
+                    <p className="mt-1 text-xs text-fg-subtle">
                       {r.uploader ? `${r.uploader} · ` : ""}
                       {r.duration ? formatDuration(r.duration) : "—"}
                     </p>

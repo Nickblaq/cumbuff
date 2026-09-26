@@ -29,8 +29,8 @@ export const metadata = {
 };
 
 export const viewport = {
-  themeColor: "#08080b",
-  colorScheme: "dark",
+  themeColor: "#fffbf7",
+  colorScheme: "light",
 };
 
 export default function RootLayout({ children }) {

@@ -190,8 +190,8 @@ export default function ImageTool() {
           aria-label="Upload an image by dropping a file, or press Enter to browse"
           className={`mt-5 w-full cursor-pointer rounded-2xl border-2 border-dashed px-6 py-8 text-center transition ${
             dragging
-              ? "border-amber-glow bg-amber-glow/5"
-              : "border-line bg-ink-950/40 hover:border-amber-glow/40"
+              ? "border-accent bg-accent/5"
+              : "border-line bg-surface-2/40 hover:border-accent/40"
           }`}
         >
           <input
@@ -201,10 +201,10 @@ export default function ImageTool() {
             className="sr-only"
             onChange={(e) => selectFile(e.target.files?.[0])}
           />
-          <span className="block text-sm font-medium text-mist-100">
+          <span className="block text-sm font-medium text-fg">
             {file ? file.name : "Drop an image or click to browse"}
           </span>
-          <span className="mt-1 block text-xs text-mist-500">
+          <span className="mt-1 block text-xs text-fg-subtle">
             {file ? formatBytes(file.size) : "PNG · JPEG · WEBP · AVIF · GIF · SVG"}
           </span>
         </button>
@@ -320,10 +320,10 @@ export default function ImageTool() {
         {originalUrl || resultUrl ? (
           <div className="mt-6 grid gap-4 sm:grid-cols-2">
             <div>
-              <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-mist-500">
+              <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-fg-subtle">
                 Original
               </div>
-              <div className="flex h-56 items-center justify-center overflow-hidden rounded-xl border border-line bg-[repeating-conic-gradient(#15151f_0%_25%,#1d1d29_0%_50%)] bg-[length:20px_20px]">
+              <div className="flex h-56 items-center justify-center overflow-hidden rounded-xl border border-line bg-[repeating-conic-gradient(#efe0d2_0%_25%,#ffffff_0%_50%)] bg-[length:20px_20px]">
                 {originalUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
@@ -332,20 +332,20 @@ export default function ImageTool() {
                     className="max-h-full max-w-full object-contain"
                   />
                 ) : (
-                  <span className="text-xs text-mist-500">No image</span>
+                  <span className="text-xs text-fg-subtle">No image</span>
                 )}
               </div>
             </div>
             <div>
-              <div className="mb-2 flex items-center justify-between text-[11px] font-semibold uppercase tracking-wider text-mist-500">
+              <div className="mb-2 flex items-center justify-between text-[11px] font-semibold uppercase tracking-wider text-fg-subtle">
                 <span>Result</span>
                 {resultMeta ? (
-                  <span className="font-mono text-mist-400">
+                  <span className="font-mono text-fg-muted">
                     {formatBytes(resultMeta.size)} · {resultMeta.type}
                   </span>
                 ) : null}
               </div>
-              <div className="flex h-56 items-center justify-center overflow-hidden rounded-xl border border-line bg-[repeating-conic-gradient(#15151f_0%_25%,#1d1d29_0%_50%)] bg-[length:20px_20px]">
+              <div className="flex h-56 items-center justify-center overflow-hidden rounded-xl border border-line bg-[repeating-conic-gradient(#efe0d2_0%_25%,#ffffff_0%_50%)] bg-[length:20px_20px]">
                 {resultUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
@@ -354,7 +354,7 @@ export default function ImageTool() {
                     className="max-h-full max-w-full object-contain"
                   />
                 ) : (
-                  <span className="text-xs text-mist-500">Transform to preview</span>
+                  <span className="text-xs text-fg-subtle">Transform to preview</span>
                 )}
               </div>
             </div>
@@ -397,7 +397,7 @@ export default function ImageTool() {
             </Button>
           </div>
         </div>
-        <div className="mt-5 flex h-64 items-center justify-center overflow-hidden rounded-xl border border-line bg-ink-950/60">
+        <div className="mt-5 flex h-64 items-center justify-center overflow-hidden rounded-xl border border-line bg-surface-2/60">
           {phKey > 0 ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -409,7 +409,7 @@ export default function ImageTool() {
               className="max-h-full max-w-full object-contain"
             />
           ) : (
-            <span className="text-xs text-mist-500">Click Generate to render a placeholder</span>
+            <span className="text-xs text-fg-subtle">Click Generate to render a placeholder</span>
           )}
         </div>
       </Card>

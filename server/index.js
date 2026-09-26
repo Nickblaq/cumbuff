@@ -360,15 +360,15 @@ app.get("/api/node/image/placeholder", (req, res) =>
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
       <defs>
         <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stop-color="#101017"/>
-          <stop offset="55%" stop-color="#2a1d12"/>
-          <stop offset="100%" stop-color="#0e2b26"/>
+          <stop offset="0%" stop-color="#fff4ec"/>
+          <stop offset="55%" stop-color="#ffe4d1"/>
+          <stop offset="100%" stop-color="#d7f2ec"/>
         </linearGradient>
       </defs>
       <rect width="100%" height="100%" fill="url(#g)"/>
       <rect x="24" y="24" width="${Math.max(width - 48, 1)}" height="${Math.max(height - 48, 1)}"
-        fill="none" stroke="#f4b544" stroke-opacity="0.35" stroke-width="2" rx="18"/>
-      <text x="50%" y="50%" fill="#f4b544" font-family="monospace" font-size="${Math.max(
+        fill="none" stroke="#c2410c" stroke-opacity="0.45" stroke-width="2" rx="18"/>
+      <text x="50%" y="50%" fill="#c2410c" font-family="monospace" font-size="${Math.max(
         Math.round(Math.min(width, height) / 12),
         14,
       )}" text-anchor="middle" dominant-baseline="middle">${label}</text>
@@ -391,20 +391,20 @@ app.get("/og.png", (_req, res) =>
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
       <defs>
         <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stop-color="#08080b"/>
-          <stop offset="60%" stop-color="#141019"/>
-          <stop offset="100%" stop-color="#0b211d"/>
+          <stop offset="0%" stop-color="#fffbf7"/>
+          <stop offset="60%" stop-color="#fff1e6"/>
+          <stop offset="100%" stop-color="#e6f6f2"/>
         </linearGradient>
       </defs>
       <rect width="100%" height="100%" fill="url(#bg)"/>
-      <rect x="0" y="0" width="100%" height="6" fill="#f4b544"/>
-      <g font-family="Inter, Segoe UI, sans-serif" fill="#f5f5f7">
+      <rect x="0" y="0" width="100%" height="6" fill="#c2410c"/>
+      <g font-family="Inter, Segoe UI, sans-serif" fill="#23180f">
         <text x="90" y="300" font-size="86" font-weight="800">cumbuff</text>
-        <text x="90" y="370" font-size="34" fill="#9a9aad">one endpoint for video &amp; image work</text>
-        <text x="90" y="440" font-size="26" font-family="monospace" fill="#35d6ac">yt-dlp + sharp · node + python</text>
+        <text x="90" y="370" font-size="34" fill="#6b5544">one endpoint for video &amp; image work</text>
+        <text x="90" y="440" font-size="26" font-family="monospace" fill="#0f766e">yt-dlp + sharp · node + python</text>
       </g>
-      <rect x="88" y="150" width="88" height="88" rx="22" fill="#f4b544"/>
-      <text x="132" y="210" font-family="monospace" font-size="40" font-weight="700" fill="#08080b" text-anchor="middle">cb</text>
+      <rect x="88" y="150" width="88" height="88" rx="22" fill="#c2410c"/>
+      <text x="132" y="210" font-family="monospace" font-size="40" font-weight="700" fill="#ffffff" text-anchor="middle">cb</text>
     </svg>`;
     const data = await sharp(Buffer.from(svg)).png().toBuffer();
     res.setHeader("Content-Type", "image/png");

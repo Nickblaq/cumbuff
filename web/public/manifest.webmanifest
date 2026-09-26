@@ -4,8 +4,8 @@
   "description": "Inspect and download video and audio with yt-dlp, and transform images with sharp, from one endpoint.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#08080b",
-  "theme_color": "#08080b",
+  "background_color": "#fffbf7",
+  "theme_color": "#fffbf7",
   "icons": [
     {
       "src": "/icon.svg",
