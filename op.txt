@@ -1,0 +1,428 @@
+// types/operation.ts
+export type OperationTier = 1 | 2 | 3 | 4 | 5 | 6;
+export type OperationCategory = "video" | "audio" | "container" | "subtitle" | "metadata" | "analysis" | "chain";
+export type MediaKind = "video" | "audio" | "image" | "subtitle" | "data" | "attachment" | "any";
+export type SimpleCondition = { param: string; operator: "eq" | "neq" | "in" | "notIn" | "gt" | "gte" | "lt" | "lte" | "truthy" | "falsy"; value?: unknown };
+export type Condition = SimpleCondition | { and: Condition[] } | { or: Condition[] } | { not: Condition };
+export type OptionDef = { value: string; label: string; description?: string; disabled?: boolean; showIf?: Condition };
+export type ValidationRule = { type: "required"; message?: string } | { type: "min"; value: number; message?: string } | { type: "max"; value: number; message?: string } | { type: "minLength"; value: number; message?: string } | { type: "maxLength"; value: number; message?: string } | { type: "pattern"; value: string; message?: string };
+export type ParamBase = { key: string; label: string; description?: string; placeholder?: string; helpText?: string; advanced?: boolean; group?: string; showIf?: Condition; disableIf?: Condition; rules?: ValidationRule[] };
+export type StringParam = ParamBase & { type: "string"; default?: string; maxLength?: number; suggestions?: string[] };
+export type NumberParam = ParamBase & { type: "number"; default?: number; min?: number; max?: number; step?: number; unit?: string };
+export type IntegerParam = ParamBase & { type: "integer"; default?: number; min?: number; max?: number; unit?: string };
+export type BooleanParam = ParamBase & { type: "boolean"; default?: boolean; trueLabel?: string; falseLabel?: string };
+export type EnumParam = ParamBase & { type: "enum"; default?: string; options: OptionDef[]; searchable?: boolean };
+export type MultiSelectParam = ParamBase & { type: "multiselect"; default?: string[]; options: OptionDef[]; min?: number; max?: number };
+export type TimeParam = ParamBase & { type: "time"; default?: string; format?: "timecode" | "seconds" | "samples" };
+export type DurationParam = ParamBase & { type: "duration"; default?: string; format?: "timecode" | "seconds" };
+export type ColorParam = ParamBase & { type: "color"; default?: string; alpha?: boolean };
+export type SizeParam = ParamBase & { type: "size"; default?: string; presets?: string[]; allowExpressions?: boolean };
+export type BitrateParam = ParamBase & { type: "bitrate"; default?: string; units?: ("b" | "k" | "m")[]; mode?: "CBR" | "VBR" | "ABR" | "CRF" };
+export type ExpressionParam = ParamBase & { type: "expression"; default?: string; variables?: { name: string; description: string }[]; functions?: { name: string; description: string }[]; filterName?: string };
+export type KeyValueParam = ParamBase & { type: "keyvalue"; default?: Record<string, string>; keyLabel?: string; valueLabel?: string; allowedKeys?: string[] };
+export type RangeParam = ParamBase & { type: "range"; default?: { min: number; max: number }; min?: number; max?: number; step?: number; unit?: string };
+export type FileParam = ParamBase & { type: "file"; accept: MediaKind[]; multiple?: boolean; ordered?: boolean; minFiles?: number; maxFiles?: number };
+export type CodecParam = ParamBase & { type: "codec"; role: "encoder" | "decoder" | "both"; mediaKind: "video" | "audio" | "subtitle"; default?: string; allowCopy?: boolean };
+export type StreamSpecifierParam = ParamBase & { type: "stream"; default?: allow string; allowedKinds?: MediaKind[] };
+export type FilterComplex?:GraphParam = ParamBase & { boolean type: "filtergraph"; default?: string; };
+export type SubParamListParam = ParamBase & { type: "subparams"; fields: ParamDef[]; min?: number; max?: number };
+export type ParamDef = StringParam | NumberParam | IntegerParam | BooleanParam | EnumParam | MultiSelectParam | TimeParam | DurationParam | ColorParam | SizeParam | BitrateParam | ExpressionParam | KeyValueParam | RangeParam | FileParam | CodecParam | StreamSpecifierParam | FilterGraphParam | SubParamListParam;
+export type InputSlot = { key: string; label: string; kind: MediaKind; required: boolean; multiple?: boolean; order?: number; description?: string };
+export type OutputSlot = { key: string; label: string; kind: MediaKind; suggestedExtension?: string; editable?: boolean; multiple?: boolean };
+export type OperationDescriptor = { id: string; name: string; description: string; tier: OperationTier; category: OperationCategory; version: string; tags?: string[]; docsUrl?: string; inputs: InputSlot[]; outputs: OutputSlot[]; params: ParamDef[]; paramGroups?: string[]; chainSteps?: string[]; estimatedComplexity?: "low" | "medium" | "high"; estimatedDurationFactor?: number };
+export type OperationRegistry = { byId: Record<string, OperationDescriptor>; byTier: Record<OperationTier, OperationDescriptor[]>; byCategory: Record<OperationCategory, OperationDescriptor[]> };
+export type FormValues = Record<string, unknown>;
+export type FormErrors = Record<string, string>;
+
+// lib/conditions.ts
+import type { Condition, FormValues } from "@/types/operation";
+export function evaluateCondition(cond: Condition | undefined, values: FormValues): boolean {
+  if (!cond) return true;
+  if ("and" in cond) return cond.and.every((c) => evaluateCondition(c, values));
+  if ("or" in cond) return cond.or.some((c) => evaluateCondition(c, values));
+  if ("not" in cond) return !evaluateCondition(cond.not, values);
+  const v = values[cond.param];
+  switch (cond.operator) {
+    case "eq": return v === cond.value;
+    case "neq": return v !== cond.value;
+    case "in": return Array.isArray(cond.value) && cond.value.includes(v as never);
+    case "notIn": return Array.isArray(cond.value) && !cond.value.includes(v as never);
+    case "gt": return typeof v === "number" && v > (cond.value as number);
+    case "gte": return typeof v === "number" && v >= (cond.value as number);
+    case "lt": return typeof v === "number" && v < (cond.value as number);
+    case "lte": return typeof v === "number" && v <= (cond.value as number);
+    case "truthy": return Boolean(v);
+    case "falsy": return !v;
+    default: return true;
+  }
+}
+
+// lib/defaults.ts
+import type { OperationDescriptor, FormValues } from "@/types/operation";
+export function defaultValues(op: OperationDescriptor): FormValues {
+  const out: FormValues = {};
+  for (const p of op.params) {
+    if (p.default !== undefined) { out[p.key] = p.default; continue; }
+    switch (p.type) {
+      case "string": out[p.key] = ""; break;
+      case "number": out[p.key] = p.min ?? 0; break;
+      case "integer": out[p.key] = p.min ?? 0; break;
+      case "boolean": out[p.key] = false; break;
+      case "enum": out[p.key] = p.options[0]?.value ?? ""; break;
+      case "multiselect": out[p.key] = []; break;
+      case "color": out[p.key] = "#000000"; break;
+      case "keyvalue": out[p.key] = {}; break;
+      case "range": out[p.key] = { min: p.min ?? 0, max: p.max ?? 100 }; break;
+      case "subparams": out[p.key] = []; break;
+      default: out[p.key] = ""; break;
+    }
+  }
+  return out;
+}
+
+// lib/registry.ts
+import type { OperationDescriptor } from "@/types/operation";
+export const convert: OperationDescriptor = {
+  id: "convert", name: "Format Conversion", description: "Convert any media file from one container/codec format to another.", tier: 1, category: "container", version: "1.0.0", tags: ["mp4", "mkv", "webm"],
+  inputs: [{ key: "main", label: "Source File", kind: "any", required: true }],
+  outputs: [{ key: "out", label: "Converted File", kind: "any", editable: true }],
+  paramGroups: ["Container", "Video", "Audio"],
+  params: [
+    { key: "format", type: "enum", label: "Container Format", group: "Container", default: "mp4", options: [{ value: "mp4", label: "MP4" }, { value: "mkv", label: "Matroska (MKV)" }, { value: "webm", label: "WebM" }, { value: "mov", label: "QuickTime (MOV)" }, { value: "avi", label: "AVI" }], rules: [{ type: "required" }] },
+    { key: "videoCodec", type: "codec", label: "Video Codec", group: "Video", role: "encoder", mediaKind: "video", allowCopy: true, default: "libx264" },
+    { key: "audioCodec", type: "codec", label: "Audio Codec", group: "Audio", role: "encoder", mediaKind: "audio", allowCopy: true, default: "aac" },
+  ],
+};
+export const trim: OperationDescriptor = {
+  id: "trim", name: "Precise Trimming", description: "Cut a specific time range from any media file with frame accuracy.", tier: 1, category: "video", version: "1.0.0",
+  inputs: [{ key: "main", label: "Source", kind: "any", required: true }],
+  outputs: [{ key: "out", label: "Trimmed File", kind: "any", editable: true }],
+  paramGroups: ["Range", "Mode"],
+  params: [
+    { key: "start", type: "time", label: "Start Time", group: "Range", default: "00:00:00", format: "timecode", helpText: "Timecode (HH:MM:SS.ms) or seconds." },
+    { key: "end", type: "time", label: "End Time", group: "Range", format: "timecode" },
+    { key: "duration", type: "duration", label: "Duration", group: "Range", format: "seconds", helpText: "Alternative to End Time.", showIf: { param: "end", operator: "falsy" } },
+    { key: "mode", type: "enum", label: "Trim Mode", group: "Mode", default: "reencode", options: [{ value: "reencode", label: "Re-encode (frame accurate)" }, { value: "copy", label: "Stream copy (fast)" }], rules: [{ type: "required" }] },
+  ],
+};
+export const scale: OperationDescriptor = {
+  id: "scale", name: "Video Resize / Scale", description: "Change resolution using high-quality Lanczos, bicubic, or spline scalers.", tier: 2, category: "video", version: "1.0.0",
+  inputs: [{ key: "main", label: "Video", kind: "video", required: true }],
+  outputs: [{ key: "out", label: "Scaled Video", kind: "video", editable: true }],
+  paramGroups: ["Dimensions", "Quality"],
+  params: [
+    { key: "size", type: "size", label: "Output Size", group: "Dimensions", default: "1280x720", presets: ["640x360", "1280x720", "1920x1080", "3840x2160"], allowExpressions: true, helpText: "Use -1 for auto." },
+    { key: "scaler", type: "enum", label: "Scaling Algorithm", group: "Quality", default: "lanczos", options: [{ value: "fast_bilinear", label: "Fast Bilinear" }, { value: "bilinear", label: "Bilinear" }, { value: "bicubic", label: "Bicubic" }, { value: "lanczos", label: "Lanczos" }, { value: "spline", label: "Spline" }, { value: "neighbor", label: "Nearest Neighbor" }] },
+    { key: "forceAspect", type: "boolean", label: "Preserve Aspect Ratio", group: "Dimensions", default: true },
+  ],
+};
+export const volume: OperationDescriptor = {
+  id: "volume", name: "Volume Adjustment", description: "Apply gain in dB, linear multipliers, or dynamic expressions.", tier: 2, category: "audio", version: "1.0.0",
+  inputs: [{ key: "main", label: "Audio", kind: "audio", required: true }],
+  outputs: [{ key: "out", label: "Adjusted Audio", kind: "audio", editable: true }],
+  params: [
+    { key: "gain", type: "number", label: "Gain", default: 0, min: -60, max: 60, step: 0.5, unit: "dB", rules: [{ type: "required" }] },
+    { key: "precision", type: "enum", label: "Precision", default: "float", advanced: true, options: [{ value: "fixed", label: "Fixed-point" }, { value: "float", label: "Float (32-bit)" }, { value: "double", label: "Double (64-bit)" }] },
+    { key: "useExpression", type: "boolean", label: "Use Dynamic Expression", default: false },
+    { key: "expression", type: "expression", label: "Volume Expression", default: "1.0", showIf: { param: "useExpression", operator: "truthy" }, variables: [{ name: "t", description: "Frame time in seconds" }, { name: "n", description: "Frame number" }], functions: [{ name: "sin", description: "Sine" }, { name: "min", description: "Minimum" }, { name: "max", description: "Maximum" }] },
+  ],
+};
+export const chromakey: OperationDescriptor = {
+  id: "chromakey", name: "Chroma Keying", description: "Remove green/blue screens using chromakey or colorkey filters.", tier: 3, category: "video", version: "1.0.0",
+  inputs: [{ key: "main", label: "Foreground", kind: "video", required: true }],
+  outputs: [{ key: "out", label: "Keyed Video", kind: "video", editable: true }],
+  params: [
+    { key: "color", type: "color", label: "Key Color", default: "#00FF00", alpha: false },
+    { key: "similarity", type: "number", label: "Similarity", default: 0.3, min: 0.01, max: 1, step: 0.01, helpText: "0.01 = exact, 1.0 = everything." },
+    { key: "blend", type: "number", label: "Edge Blend", default: 0.1, min: 0, max: 1, step: 0.01 },
+    { key: "yuv", type: "boolean", label: "Input color is already YUV", default: false, advanced: true },
+  ],
+};
+export const normalize: OperationDescriptor = {
+  id: "normalize", name: "Loudness Normalization (EBU R128)", description: "Normalize to -23/-16/-14 LUFS with true-peak limiting.", tier: 4, category: "audio", version: "1.0.0",
+  inputs: [{ key: "main", label: "Audio", kind: "audio", required: true }],
+  outputs: [{ key: "out", label: "Normalized Audio", kind: "audio", editable: true }],
+  paramGroups: ["Target", "Advanced"],
+  params: [
+    { key: "target", type: "enum", label: "Target Loudness", group: "Target", default: "-16", options: [{ value: "-23", label: "-23 LUFS (broadcast)" }, { value: "-16", label: "-16 LUFS (podcast)" }, { value: "-14", label: "-14 LUFS (streaming)" }] },
+    { key: "truePeak", type: "number", label: "Max True Peak", group: "Target", default: -2, min: -9, max: 0, unit: "dBTP" },
+    { key: "lra", type: "number", label: "Loudness Range Target", group: "Target", default: 7, min: 1, max: 50, unit: "LU" },
+    { key: "dualMono", type: "boolean", label: "Treat mono as dual-mono", group: "Advanced", default: false, advanced: true },
+    { key: "printFormat", type: "enum", label: "Stats Output", group: "Advanced", default: "none", advanced: true, options: [{ value: "none", label: "None" }, { value: "summary", label: "Summary" }, { value: "json", label: "JSON" }] },
+  ],
+};
+export const youtubePreset: OperationDescriptor = {
+  id: "youtube-preset", name: "YouTube Upload Preset", description: "Scale to 1080p, H.264 CRF 18, AAC 192k, faststart MP4.", tier: 5, category: "chain", version: "1.0.0", chainSteps: ["scale", "convert"],
+  inputs: [{ key: "main", label: "Source Video", kind: "video", required: true }],
+  outputs: [{ key: "out", label: "YouTube MP4", kind: "video", editable: true }],
+  paramGroups: ["Output", "Quality"],
+  params: [
+    { key: "resolution", type: "enum", label: "Resolution", group: "Output", default: "1080p", options: [{ value: "720p", label: "720p" }, { value: "1080p", label: "1080p" }, { value: "1440p", label: "1440p" }, { value: "4k", label: "4K" }] },
+    { key: "crf", type: "integer", label: "Quality (CRF)", group: "Quality", default: 18, min: 0, max: 51, helpText: "Lower = better quality." },
+    { key: "audioBitrate", type: "bitrate", label: "Audio Bitrate", group: "Quality", default: "192k", units: ["k", "m"] },
+    { key: "faststart", type: "boolean", label: "Faststart (web optimized)", group: "Output", default: true },
+  ],
+};
+export const stabilize: OperationDescriptor = {
+  id: "stabilize", name: "Video Stabilization", description: "Two-pass deshake via vidstabdetect + vidstabtransform.", tier: 3, category: "video", version: "1.0.0", chainSteps: ["vidstabdetect", "vidstabtransform"],
+  inputs: [{ key: "main", label: "Shaky Video", kind: "video", required: true }],
+  outputs: [{ key: "out", label: "Stabilized Video", kind: "video", editable: true }],
+  paramGroups: ["Detection", "Transform"],
+  params: [
+    { key: "shakiness", type: "integer", label: "Shakiness", group: "Detection", default: 5, min: 1, max: 10, helpText: "1 = slight, 10 = strong." },
+    { key: "accuracy", type: "integer", label: "Detection Accuracy", group: "Detection", default: 15, min: 1, max: 15, advanced: true },
+    { key: "smoothing", type: "integer", label: "Smoothing Frames", group: "Transform", default: 10, min: 0, max: 100, helpText: "0 = virtual tripod." },
+    { key: "zoom", type: "number", label: "Zoom %", group: "Transform", default: 0, min: -50, max: 100, unit: "%" },
+    { key: "cropMode", type: "enum", label: "Border Handling", group: "Transform", default: "keep", options: [{ value: "keep", label: "Keep previous frame" }, { value: "black", label: "Fill black" }] },
+  ],
+};
+export const OPERATIONS: OperationDescriptor[] = [convert, trim, scale, volume, chromakey, normalize, stabilize, youtubePreset];
+export const byId: Record<string, OperationDescriptor> = Object.fromEntries(OPERATIONS.map((op) => [op.id, op]));
+export const byTier = OPERATIONS.reduce<Record<number, OperationDescriptor[]>>((acc, op) => { (acc[op.tier] ??= []).push(op); return acc; }, {});
+export const byCategory = OPERATIONS.reduce<Record<string, OperationDescriptor[]>>((acc, op) => { (acc[op.category] ??= []).push(op); return acc; }, {});
+export const TIER_LABELS: Record<number, string> = { 1: "Basic Operations", 2: "Intermediate Operations", 3: "Advanced Video Operations", 4: "Advanced Audio Operations", 5: "Complex Chained Operations", 6: "Specialized / Expert" };
+
+// components/OperationMenu.tsx
+"use client";
+import { OPERATIONS, TIER_LABELS } from "@/lib/registry";
+import type { OperationDescriptor } from "@/types/operation";
+export function OperationMenu({ onSelect }: { onSelect: (op: OperationDescriptor) => void }) {
+  const tiers = Object.keys(TIER_LABELS).map(Number).sort((a, b) => a - b);
+  return (
+    <nav className="space-y-6">
+      {tiers.map((tier) => {
+        const ops = OPERATIONS.filter((o) => o.tier === tier);
+        if (!ops.length) return null;
+        return (
+          <section key={tier}>
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-500">{TIER_LABELS[tier]}</h3>
+            <ul className="mt-2 space-y-1">
+              {ops.map((op) => (
+                <li key={op.id}>
+                  <button onClick={() => onSelect(op)} className="w-full rounded px-3 py-2 text-left hover:bg-gray-100">
+                    <div className="font-medium">{op.name}</div>
+                    <div className="text-xs text-gray-500">{op.description}</div>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        );
+      })}
+    </nav>
+  );
+}
+
+// components/OperationForm.tsx
+"use client";
+import { useMemo, useState } from "react";
+import type { OperationDescriptor, ParamDef, FormValues } from "@/types/operation";
+import { defaultValues } from "@/lib/defaults";
+import { evaluateCondition } from "@/lib/conditions";
+import { ParamInput } from "./ParamInput";
+export function OperationForm({ op }: { op: OperationDescriptor }) {
+  const [values, setValues] = useState<FormValues>(() => defaultValues(op));
+  const visibleParams = useMemo(() => op.params.filter((p) => evaluateCondition(p.showIf, values)), [op.params, values]);
+  const groups = useMemo(() => {
+    const map = new Map<string, ParamDef[]>();
+    for (const p of visibleParams) {
+      const g = p.group ?? "General";
+      if (!map.has(g)) map.set(g, []);
+      map.get(g)!.push(p);
+    }
+    return map;
+  }, [visibleParams]);
+  const setValue = (key: string, v: unknown) => setValues((prev) => ({ ...prev, [key]: v }));
+  return (
+    <form className="space-y-6">
+      <header>
+        <h2 className="text-lg font-semibold">{op.name}</h2>
+        <p className="text-sm text-gray-600">{op.description}</p>
+      </header>
+      {[...groups.entries()].map(([group, params]) => (
+        <fieldset key={group} className="space-y-3">
+          <legend className="text-sm font-medium text-gray-700">{group}</legend>
+          {params.map((p) => (
+            <ParamInput key={p.key} param={p} value={values[p.key]} disabled={evaluateCondition(p.disableIf, values)} onChange={(v) => setValue(p.key, v)} />
+          ))}
+        </fieldset>
+      ))}
+      <pre className="rounded bg-gray-50 p-3 text-xs">{JSON.stringify(values, null, 2)}</pre>
+    </form>
+  );
+}
+
+// components/ParamInput.tsx
+"use client";
+import type { ParamDef } from "@/types/operation";
+type Props = { param: ParamDef; value: unknown; disabled?: boolean; onChange: (v: unknown) => void };
+export function ParamInput({ param, value, disabled, onChange }: Props) {
+  const common = "w-full rounded border px-2 py-1 text-sm disabled:opacity-50";
+  switch (param.type) {
+    case "string":
+      return (
+        <label className="block">
+          <span className="text-sm">{param.label}</span>
+          <input className={common} placeholder={param.placeholder} value={(value as string) ?? ""} disabled={disabled} onChange={(e) => onChange(e.target.value)} />
+          {param.helpText && <p className="text-xs text-gray-500">{param.helpText}</p>}
+        </label>
+      );
+    case "number":
+    case "integer":
+      return (
+        <label className="block">
+          <span className="text-sm">{param.label}</span>
+          <input type="number" className={common} min={param.min} max={param.max} step={param.type === "integer" ? 1 : param.step ?? "any"} value={(value as number) ?? 0} disabled={disabled} onChange={(e) => onChange(Number(e.target.value))} />
+          {param.unit && <span className="text-xs text-gray-500">{param.unit}</span>}
+        </label>
+      );
+    case "boolean":
+      return (
+        <label className="flex items-center gap-2">
+          <input type="checkbox" checked={Boolean(value)} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
+          <span className="text-sm">{param.label}</span>
+        </label>
+      );
+    case "enum":
+      return (
+        <label className="block">
+          <span className="text-sm">{param.label}</span>
+          <select className={common} value={(value as string) ?? ""} disabled={disabled} onChange={(e) => onChange(e.target.value)}>
+            {param.options.map((o) => (<option key={o.value} value={o.value} disabled={o.disabled}>{o.label}</option>))}
+          </select>
+        </label>
+      );
+    case "multiselect":
+      return (
+        <div>
+          <span className="text-sm">{param.label}</span>
+          <div className="mt-1 space-y-1">
+            {param.options.map((o) => {
+              const arr = (value as string[]) ?? [];
+              const checked = arr.includes(o.value);
+              return (
+                <label key={o.value} className="flex items-center gap-2">
+                  <input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => { const next = e.target.checked ? [...arr, o.value] : arr.filter((v) => v !== o.value); onChange(next); }} />
+                  <span className="text-sm">{o.label}</span>
+                </label>
+              );
+            })}
+          </div>
+        </div>
+      );
+    case "time":
+    case "duration":
+      return (
+        <label className="block">
+          <span className="text-sm">{param.label}</span>
+          <input className={common} placeholder={param.format === "timecode" ? "00:00:00.000" : "seconds"} value={(value as string) ?? ""} disabled={disabled} onChange={(e) => onChange(e.target.value)} />
+          {param.helpText && <p className="text-xs text-gray-500">{param.helpText}</p>}
+        </label>
+      );
+    case "color":
+      return (
+        <label className="block">
+          <span className="text-sm">{param.label}</span>
+          <input type="color" className="h-8 w-full" value={typeof value === "string" ? value.slice(0, 7) : "#000000"} disabled={disabled} onChange={(e) => onChange(e.target.value)} />
+        </label>
+      );
+    case "size":
+      return (
+        <label className="block">
+          <span className="text-sm">{param.label}</span>
+          <input className={common} value={(value as string) ?? ""} disabled={disabled} onChange={(e) => onChange(e.target.value)} />
+          {param.presets && (
+            <div className="mt-1 flex flex-wrap gap-1">
+              {param.presets.map((p) => (<button key={p} type="button" className="rounded bg-gray-100 px-2 py-0.5 text-xs" onClick={() => onChange(p)}>{p}</button>))}
+            </div>
+          )}
+        </label>
+      );
+    case "bitrate":
+      return (
+        <label className="block">
+          <span className="text-sm">{param.label}</span>
+          <input className={common} placeholder="192k" value={(value as string) ?? ""} disabled={disabled} onChange={(e) => onChange(e.target.value)} />
+        </label>
+      );
+    case "expression":
+    case "filtergraph":
+      return (
+        <label className="block">
+          <span className="text-sm">{param.label}</span>
+          <textarea className={common} rows={3} value={(value as string) ?? ""} disabled={disabled} onChange={(e) => onChange(e.target.value)} />
+          {param.type === "expression" && param.variables && (<p className="text-xs text-gray-500">Variables: {param.variables.map((v) => v.name).join(", ")}</p>)}
+        </label>
+      );
+    case "keyvalue": {
+      const obj = (value as Record<string, string>) ?? {};
+      return (
+        <div>
+          <span className="text-sm">{param.label}</span>
+          <pre className="mt-1 rounded bg-gray-50 p-2 text-xs">{JSON.stringify(obj, null, 2)}</pre>
+          <p className="text-xs text-gray-500">(key/value editor placeholder)</p>
+        </div>
+      );
+    }
+    case "range": {
+      const r = (value as { min: number; max: number }) ?? { min: 0, max: 100 };
+      return (
+        <div>
+          <span className="text-sm">{param.label}</span>
+          <div className="flex gap-2">
+            <input type="number" className={common} value={r.min} min={param.min} max={param.max} disabled={disabled} onChange={(e) => onChange({ ...r, min: Number(e.target.value) })} />
+            <input type="number" className={common} value={r.max} min={param.min} max={param.max} disabled={disabled} onChange={(e) => onChange({ ...r, max: Number(e.target.value) })} />
+          </div>
+        </div>
+      );
+    }
+    case "file":
+      return (
+        <label className="block">
+          <span className="text-sm">{param.label}</span>
+          <input type="file" className={common} multiple={param.multiple} disabled={disabled} onChange={(e) => onChange(param.multiple ? Array.from(e.target.files ?? []) : e.target.files?.[0] ?? null)} />
+        </label>
+      );
+    case "codec":
+    case "stream":
+      return (
+        <label className="block">
+          <span className="text-sm">{param.label}</span>
+          <input className={common} placeholder={param.type === "codec" ? "libx264" : "0:v:0"} value={(value as string) ?? ""} disabled={disabled} onChange={(e) => onChange(e.target.value)} />
+          <p className="text-xs text-gray-500">(picker placeholder)</p>
+        </label>
+      );
+    case "subparams": {
+      const list = (value as Record<string, unknown>[]) ?? [];
+      return (
+        <div>
+          <span className="text-sm">{param.label}</span>
+          <button type="button" className="mt-1 rounded bg-gray-100 px-2 py-1 text-xs" onClick={() => onChange([...list, {}])}>+ Add entry</button>
+          <p className="mt-1 text-xs text-gray-500">{list.length} entr{list.length === 1 ? "y" : "ies"}</p>
+        </div>
+      );
+    }
+    default: return null;
+  }
+}
+
+// app/playground/page.tsx
+"use client";
+import { useState } from "react";
+import type { OperationDescriptor } from "@/types/operation";
+import { OperationMenu } from "@/components/OperationMenu";
+import { OperationForm } from "@/components/OperationForm";
+export default function Playground() {
+  const [selected, setSelected] = useState<OperationDescriptor | null>(null);
+  return (
+    <main className="mx-auto grid max-w-6xl grid-cols-[320px_1fr] gap-6 p-6">
+      <aside className="border-r pr-4">
+        <h1 className="mb-4 text-lg font-bold">Operations</h1>
+        <OperationMenu onSelect={setSelected} />
+      </aside>
+      <section>
+        {selected ? <OperationForm op={selected} /> : <p className="text-gray-500">Select an operation to begin.</p>}
+      </section>
+    </main>
+  );
+}
